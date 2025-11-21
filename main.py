@@ -388,8 +388,7 @@ if st.button("🔍 Submit"):
                 st.markdown(
                     f"""
                     <div class="result-card error-card">
-                        <h4>{category}: {resolution}</h4>
-                        <p>- {description}</p>
+                        <h4>{category}: {resolution}</h4><p>- {description}</p>
                     </div>
                     """,
                     unsafe_allow_html=True,
