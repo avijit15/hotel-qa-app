@@ -142,21 +142,51 @@ def call_gemini_api(image_bytes: bytes, image_mime: str, pdf_extracted):
     client = genai.Client(api_key=api_key)
     model = "gemini-2.5-flash"
 
-    base_system = (
-         "You are a Hotel QA Specialist. Evaluate the provided image for compliance with cleanliness, "
-        "consistency, and maintenance standards. Use the following key categories when classifying findings:\n\n"
-        "1. Condition – Issues related to wear, damage, or deterioration of materials or fixtures (e.g., peeling drawers, faded paint, broken parts).\n"
-        "2. Cleanliness – Issues involving dirt, stains, or maintenance of hygiene and visual appearance (e.g., dirty surfaces, stains, debris).\n"
-        "3. Compliance – Issues involving deviation from brand standards or design specifications (e.g., incorrect fixtures, missing required items).\n\n"
-        "Respond STRICTLY in JSON with the following top-level fields only:\n"
-        "{\n"
-        '  "Issue_Present": true|false,                  // overall boolean\n'
-        '  "Category": "Condition"|"Cleanliness"|"Compliance",  // primary category for the issue\n'
-        '  "Description": "Concise explanation of the finding",\n'
-        '  "Resolution": "Specific words to correct the issue", // like replace, paint, remove, wash, clean etc.\n'
-        '  ]\n'
-        "}\n\n"
-        "Do not include any extra text, commentary, or code blocks. If multiple issues exist, choose the primary Category that best represents the most important issue and list others in Findings.")
+    base_system = """
+You are a Hotel QA Specialist. Evaluate the provided image for compliance with cleanliness,
+consistency, and maintenance standards. Use the following key categories when classifying findings:
+
+1. Condition – Issues related to wear, damage, or deterioration of materials or fixtures (e.g., peeling drawers, faded paint, broken parts).
+2. Cleanliness – Issues involving dirt, stains, or maintenance of hygiene and visual appearance (e.g., dirty surfaces, stains, debris).
+3. Compliance – Issues involving deviation from brand standards or design specifications (e.g., incorrect fixtures, missing required items).
+
+You MUST respond STRICTLY in JSON with the following top-level fields only:
+{
+  "Issue_Present": true or false,                          // true if there IS a problem visible
+  "Category": "Condition" | "Cleanliness" | "Compliance",  // primary category for the issue
+  "Description": "very short 2–4 word description",
+  "Resolution": "Replace" | "Paint" | "Repair" | "Deep clean" | "Eliminate" | "Install"
+}
+
+Formatting requirements:
+- Description MUST be a very short phrase in 2–4 words (no long sentences).
+- Resolution MUST be EXACTLY one of the following words: Replace, Paint, Repair, Deep clean, Eliminate, Install.
+- The UI will display this as: `Category: Resolution` on the first line and `- Description` on the second line.
+
+Examples of valid combinations (NOT to be returned directly, just to guide style):
+- Category: "Condition", Resolution: "Replace", Description: "Faded signage"
+- Category: "Condition", Resolution: "Paint", Description: "Discolored pole base"
+- Category: "Condition", Resolution: "Replace", Description: "Damaged window screen"
+- Category: "Cleanliness", Resolution: "Deep clean", Description: "Stained facade"
+- Category: "Cleanliness", Resolution: "Eliminate", Description: "Improper storage"
+- Category: "Cleanliness", Resolution: "Eliminate", Description: "Overgrowth on facade"
+- Category: "Condition", Resolution: "Paint", Description: "Peeling striping"
+- Category: "Condition", Resolution: "Repair", Description: "Damaged facade"
+- Category: "Compliance", Resolution: "Install", Description: "Missing cord concealment"
+- Category: "Condition", Resolution: "Repair", Description: "Inoperable machine"
+- Category: "Compliance", Resolution: "Replace", Description: "Noncompliant signage"
+- Category: "Cleanliness", Resolution: "Eliminate", Description: "Plunger in restroom"
+
+If NO issue is present at all, return:
+{
+  "Issue_Present": false,
+  "Category": "Condition",
+  "Description": "No visible issue",
+  "Resolution": "Deep clean"
+}
+
+Do not include any extra text, commentary, or code blocks outside of the JSON.
+"""
     if pdf_extracted:
         pdf_context = json.dumps(pdf_extracted) if isinstance(pdf_extracted, (dict, list)) else str(pdf_extracted)
         system_instruction_text = base_system + "\n\nContext from brand standards (extracted):\n" + pdf_context
@@ -348,9 +378,8 @@ if st.button("🔍 Submit"):
                 st.markdown(
                     f"""
                     <div class="result-card success-card">
-                        <h4>{category}</h4>
-                        <p>{description}</p>
-                        <p><strong>{resolution}</strong></p>
+                        <h4>{category}: {resolution}</h4>
+                        <p>- {description}</p>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -359,9 +388,8 @@ if st.button("🔍 Submit"):
                 st.markdown(
                     f"""
                     <div class="result-card error-card">
-                        <h4>{category}</h4>
-                        <p>{description}</p>
-                        <p><strong>{resolution}</strong></p>
+                        <h4>{category}: {resolution}</h4>
+                        <p>- {description}</p>
                     </div>
                     """,
                     unsafe_allow_html=True,
